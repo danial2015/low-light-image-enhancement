@@ -65,10 +65,12 @@ def SSR(img, sigma):
     if not isinstance(img, np.ndarray):
         img = np.array(img).astype(np.float32)
     else:
-        img = img.astype(np.float32)
+        img = img.astype(np.float32)  # ←← Pastikan float32
+
     blur = cv2.GaussianBlur(img, (0, 0), sigma)
     if img.ndim != blur.ndim:
         blur = np.expand_dims(blur, axis=-1)
+
     return np.log1p(img) - np.log1p(blur)
 
 def MSR(img, sigma_list):
@@ -76,7 +78,8 @@ def MSR(img, sigma_list):
     if not isinstance(img, np.ndarray):
         img = np.array(img).astype(np.float32)
     else:
-        img = img.astype(np.float32)
+        img = img.astype(np.float32)  # ←← Pastikan float32
+
     retinex = np.zeros_like(img)
     for sigma in sigma_list:
         retinex += SSR(img, sigma)
@@ -92,15 +95,19 @@ def MSRCR(img, sigma_list=SIGMA_LIST, G=5, b=25, alpha=125, beta=46):
     if not isinstance(img, np.ndarray):
         img = np.array(img).astype(np.float32)
     else:
-        img = img.astype(np.float32)
-    img = img + 1.0  # Avoid log(0)
+        img = img.astype(np.float32)  # ←← Pastikan float32
+
+    img = img + 1.0  # Hindari log(0)
+
     retinex = MSR(img, sigma_list)
     color_rest = color_restoration(img, alpha, beta)
     msrcr = G * (retinex * color_rest + b)
+
     for i in range(msrcr.shape[2]):
         channel = msrcr[:, :, i]
-        channel = (channel - np.min(channel)) / (np.max(channel) - np.min(channel)) * 255
+        channel = (channel - np.min(channel)) / (np.max(channel) - np.min(channel) + 1e-6) * 255
         msrcr[:, :, i] = channel
+
     return np.clip(msrcr, 0, 255).astype(np.uint8)
 
 def MSRCP(img, sigma_list=SIGMA_LIST):
@@ -108,15 +115,19 @@ def MSRCP(img, sigma_list=SIGMA_LIST):
     if not isinstance(img, np.ndarray):
         img = np.array(img).astype(np.float32)
     else:
-        img = img.astype(np.float32)
-    img = img + 1.0  # Avoid log(0)
+        img = img.astype(np.float32)  # ←← Pastikan float32
+
+    img = img + 1.0  # Hindari log(0)
+
     intensity = np.mean(img, axis=2)
     retinex = MSR(np.expand_dims(intensity, axis=2), sigma_list)
     retinex = np.squeeze(retinex)
-    retinex = (retinex - np.min(retinex)) / (np.max(retinex) - np.min(retinex)) * 255
+    retinex = (retinex - np.min(retinex)) / (np.max(retinex) - np.min(retinex) + 1e-6) * 255
+
     img_cp = np.zeros_like(img)
     for i in range(3):
-        img_cp[:, :, i] = retinex * (img[:, :, i] / intensity)
+        img_cp[:, :, i] = retinex * (img[:, :, i] / (intensity + 1e-6))
+
     return np.clip(img_cp, 0, 255).astype(np.uint8)
 
 # --- Zero-DCE Implementation ---
@@ -165,7 +176,6 @@ def process_zero_dce(img_array):
             st.warning("Zero-DCE returned None")
             return img_array
         if isinstance(result, PIL.Image.Image):
-            # Convert PIL Image to numpy array
             enhanced = np.array(result)
         elif isinstance(result, (list, tuple)):
             enhanced = result[0] if len(result) > 0 else img_array
@@ -284,26 +294,17 @@ def create_image_comparison_tab(results, light_mode=True):
     """Create tab with all enhanced images for comparison in 3x3 grid"""
     bg_color, text_color = set_theme(light_mode)
     st.header("All Results Comparison")
-    
-    # Add background toggle
     bg_toggle = st.toggle("Light Background", value=light_mode, key="bg_toggle_all_results")
     if bg_toggle != light_mode:
         light_mode = bg_toggle
         bg_color, text_color = set_theme(light_mode)
-
     if len(results) <= 1:
         st.warning("Process at least one enhancement method to see comparisons")
         return
-
-    # Prepare the methods list (excluding original image)
     methods = [m for m in results.keys() if m != "Original"]
     num_methods = len(methods)
-    cols_per_row = 3  # Display 3 columns per row
-
-    # Group methods into rows of 3
+    cols_per_row = 3
     grouped_methods = [methods[i:i + cols_per_row] for i in range(0, num_methods, cols_per_row)]
-
-    # Create a grid layout using Streamlit columns
     for row in grouped_methods:
         cols = st.columns(cols_per_row)
         for idx, col in enumerate(cols):
@@ -316,12 +317,8 @@ def create_image_comparison_tab(results, light_mode=True):
                             caption=f"NIQE: {data['metrics']['NIQE']:.2f}, BRISQUE: {data['metrics']['BRISQUE']:.2f}, Time: {data['time']:.2f}s",
                             use_container_width=True)
                     st.markdown("---")
-
-    # Optional: Show metrics summary again or add additional controls
     st.subheader("Summary")
     st.write("You can scroll through the results and compare different enhancement methods visually.")
-
-    # Add CSS for background styling
     st.markdown(
         f"""
         <style>
@@ -333,21 +330,16 @@ def create_image_comparison_tab(results, light_mode=True):
                 border: 2px solid {text_color};
                 border-radius: 10px;
             }}
-            .css-1aumxhk {{
-                background-color: {bg_color};
-                color: {text_color};
-            }}
         </style>
         """,
         unsafe_allow_html=True
     )
-    
+
 # --- Metrics Comparison ---
 def display_metrics_comparison(results, light_mode=True):
     """Display comprehensive metrics comparison across all methods"""
     bg_color, text_color = set_theme(light_mode)
     st.header("Metrics Comparison Across Models")
-    # Create metrics dataframe
     metrics_data = []
     for method, data in results.items():
         if method == "Original":
@@ -359,14 +351,12 @@ def display_metrics_comparison(results, light_mode=True):
             "Processing Time (s)": data["time"]
         })
     df = pd.DataFrame(metrics_data)
-    # Display metrics table
     st.subheader("Numerical Metrics Comparison")
     st.dataframe(df.set_index("Method").style.format({
         "NIQE": "{:.2f}",
         "BRISQUE": "{:.2f}",
         "Processing Time (s)": "{:.3f}"
     }).highlight_min(axis=0, color='lightgreen'))
-    # Visual comparison
     st.subheader("Visual Metrics Comparison")
     col1, col2 = st.columns(2)
     with col1:
@@ -389,8 +379,6 @@ def display_metrics_comparison(results, light_mode=True):
     ax3.set_xticklabels(df["Method"], rotation=45)
     ax3.set_ylabel("Time (seconds)")
     st.pyplot(fig3)
-    # Show best methods
-    st.subheader("Best Performing Methods")
     best_niqe = df.loc[df["NIQE"].idxmin()]["Method"]
     best_brisque = df.loc[df["BRISQUE"].idxmin()]["Method"]
     fastest = df.loc[df["Processing Time (s)"].idxmin()]["Method"]
@@ -402,73 +390,28 @@ def display_metrics_comparison(results, light_mode=True):
 
 # --- Main Application ---
 def main():
-    # Set page config
     st.set_page_config(page_title="Low Light Image Enhancement", layout="wide")
-    # Initialize session state for theme
     if 'light_mode' not in st.session_state:
         st.session_state.light_mode = True
-    # Remove Streamlit menu and footer
-    st.markdown("""
-    <style>
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-    </style>
-    """, unsafe_allow_html=True)
-    # Interactive theme toggle
     col1, col2 = st.columns([10, 1])
     with col2:
         st.session_state.light_mode = st.toggle("☀️", value=st.session_state.light_mode)
-    # Apply theme
     bg_color, text_color = set_theme(st.session_state.light_mode)
-    # Inject CSS dynamically based on theme
-    st.markdown(
-        f"""
-        <style>
-            .stApp {{
-                background-color: {bg_color};
-                color: {text_color};
-            }}
-            h1, h2, h3, h4, h5, h6 {{
-                color: {text_color};
-            }}
-            .stButton>button {{
-                border-color: {text_color};
-                color: {text_color};
-                background-color: {'#f0f0f0' if st.session_state.light_mode else '#262730'};
-            }}
-            .stTextInput input {{
-                color: {text_color};
-                background-color: {'#f9f9f9' if st.session_state.light_mode else '#262730'};
-                border-color: {text_color};
-            }}
-            .stSelectbox label {{
-                color: {text_color};
-            }}
-            .stImage > img {{
-                border: 2px solid {text_color};
-                border-radius: 10px;
-            }}
-            /* Responsive design */
-            @media (max-width: 768px) {{
-                .css-1aumxhk {{
-                    padding: 10px;
-                }}
-                .stMarkdown {{
-                    font-size: 14px;
-                }}
-            }}
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-    # App title
+    st.markdown(f"""
+    <style>
+        .stApp {{ background-color: {bg_color}; color: {text_color}; }}
+        h1, h2, h3, h4, h5, h6 {{ color: {text_color}; }}
+        .stButton>button {{ border-color: {text_color}; color: {text_color}; background-color: {'#f0f0f0' if st.session_state.light_mode else '#262730'}; }}
+        .stTextInput input {{ color: {text_color}; background-color: {'#f9f9f9' if st.session_state.light_mode else '#262730'}; border-color: {text_color}; }}
+        .stSelectbox label {{ color: {text_color}; }}
+        .stImage > img {{ border: 2px solid {text_color}; border-radius: 10px; }}
+    </style>
+    """, unsafe_allow_html=True)
     st.title("📸 Low Light Image Enhancement")
     st.markdown("Compare CLAHE, Retinex, Zero-DCE, and EnlightenGAN methods")
-    # File uploader
     uploaded_file = st.file_uploader("Upload low light image", type=["jpg", "jpeg", "png"])
     if uploaded_file is not None:
         try:
-            # Load and validate image
             with st.spinner("Loading image..."):
                 img = PIL.Image.open(uploaded_file)
                 img_array = np.array(img.convert('RGB')).astype(np.uint8)
@@ -476,7 +419,6 @@ def main():
                     st.error("Please upload a valid RGB color image")
                     return
                 original_metrics = calculate_metrics(img_array)
-            # Initialize results storage
             results = {
                 "Original": {
                     "image": img_array,
@@ -484,10 +426,8 @@ def main():
                     "time": 0
                 }
             }
-            # Create tabs for each method plus comparison
             tab_names = ["CLAHE", "Retinex", "Zero-DCE", "EnlightenGAN", "All Results", "Metrics Comparison"]
             tabs = st.tabs(tab_names)
-            # Process CLAHE
             with tabs[0]:
                 st.header("CLAHE Enhancement")
                 with st.spinner("Processing with CLAHE..."):
@@ -495,62 +435,35 @@ def main():
                     enhanced = apply_clahe(img_array)
                     metrics = calculate_metrics(enhanced)
                     exec_time = time.time() - start
-                    results["CLAHE"] = {
-                        "image": enhanced,
-                        "metrics": metrics,
-                        "time": exec_time
-                    }
+                    results["CLAHE"] = {"image": enhanced, "metrics": metrics, "time": exec_time}
                     display_results(img_array, enhanced, original_metrics, metrics, exec_time, st.session_state.light_mode)
-            # Process Retinex
             with tabs[1]:
                 st.header("Retinex Enhancement")
-                # Process all Retinex variants
                 with st.spinner("Processing Retinex variants..."):
-                    # Process SSR
                     start_ssr = time.time()
                     enhanced_ssr = SSR(img_array, SIGMA_LIST[0])
-                    enhanced_ssr = (enhanced_ssr - enhanced_ssr.min()) / (enhanced_ssr.max() - enhanced_ssr.min()) * 255
+                    enhanced_ssr = (enhanced_ssr - enhanced_ssr.min()) / (enhanced_ssr.max() - enhanced_ssr.min() + 1e-6) * 255
                     enhanced_ssr = enhanced_ssr.astype(np.uint8)
                     metrics_ssr = calculate_metrics(enhanced_ssr)
                     time_ssr = time.time() - start_ssr
-                    results["Retinex (SSR)"] = {
-                        "image": enhanced_ssr,
-                        "metrics": metrics_ssr,
-                        "time": time_ssr
-                    }
-                    # Process MSR
+                    results["Retinex (SSR)"] = {"image": enhanced_ssr, "metrics": metrics_ssr, "time": time_ssr}
                     start_msr = time.time()
                     enhanced_msr = MSR(img_array, SIGMA_LIST)
-                    enhanced_msr = (enhanced_msr - enhanced_msr.min()) / (enhanced_msr.max() - enhanced_msr.min()) * 255
+                    enhanced_msr = (enhanced_msr - enhanced_msr.min()) / (enhanced_msr.max() - enhanced_msr.min() + 1e-6) * 255
                     enhanced_msr = enhanced_msr.astype(np.uint8)
                     metrics_msr = calculate_metrics(enhanced_msr)
                     time_msr = time.time() - start_msr
-                    results["Retinex (MSR)"] = {
-                        "image": enhanced_msr,
-                        "metrics": metrics_msr,
-                        "time": time_msr
-                    }
-                    # Process MSRCR
+                    results["Retinex (MSR)"] = {"image": enhanced_msr, "metrics": metrics_msr, "time": time_msr}
                     start_msrcr = time.time()
                     enhanced_msrcr = MSRCR(img_array)
                     metrics_msrcr = calculate_metrics(enhanced_msrcr)
                     time_msrcr = time.time() - start_msrcr
-                    results["Retinex (MSRCR)"] = {
-                        "image": enhanced_msrcr,
-                        "metrics": metrics_msrcr,
-                        "time": time_msrcr
-                    }
-                    # Process MSRCP
+                    results["Retinex (MSRCR)"] = {"image": enhanced_msrcr, "metrics": metrics_msrcr, "time": time_msrcr}
                     start_msrcp = time.time()
                     enhanced_msrcp = MSRCP(img_array)
                     metrics_msrcp = calculate_metrics(enhanced_msrcp)
                     time_msrcp = time.time() - start_msrcp
-                    results["Retinex (MSRCP)"] = {
-                        "image": enhanced_msrcp,
-                        "metrics": metrics_msrcp,
-                        "time": time_msrcp
-                    }
-                    # Display results for the selected method
+                    results["Retinex (MSRCP)"] = {"image": enhanced_msrcp, "metrics": metrics_msrcp, "time": time_msrcp}
                     method = st.radio("Retinex Method", ["SSR", "MSR", "MSRCR", "MSRCP"], horizontal=True, key="retinex_method")
                     display_results(
                         img_array, 
@@ -560,7 +473,6 @@ def main():
                         results[f"Retinex ({method})"]["time"],
                         st.session_state.light_mode
                     )
-            # Process Zero-DCE
             with tabs[2]:
                 st.header("Zero-DCE Enhancement")
                 if load_zero_dce_model() is not None:
@@ -570,17 +482,12 @@ def main():
                         if enhanced is not None:
                             metrics = calculate_metrics(enhanced)
                             exec_time = time.time() - start
-                            results["Zero-DCE"] = {
-                                "image": enhanced,
-                                "metrics": metrics,
-                                "time": exec_time
-                            }
+                            results["Zero-DCE"] = {"image": enhanced, "metrics": metrics, "time": exec_time}
                             display_results(img_array, enhanced, original_metrics, metrics, exec_time, st.session_state.light_mode)
                         else:
                             st.error("Zero-DCE processing failed")
                 else:
                     st.warning("Zero-DCE is not available")
-            # Process EnlightenGAN
             with tabs[3]:
                 st.header("EnlightenGAN Enhancement")
                 if load_enlighten_model() is not None:
@@ -590,20 +497,14 @@ def main():
                         if enhanced is not None:
                             metrics = calculate_metrics(enhanced)
                             exec_time = time.time() - start
-                            results["EnlightenGAN"] = {
-                                "image": enhanced,
-                                "metrics": metrics,
-                                "time": exec_time
-                            }
+                            results["EnlightenGAN"] = {"image": enhanced, "metrics": metrics, "time": exec_time}
                             display_results(img_array, enhanced, original_metrics, metrics, exec_time, st.session_state.light_mode)
                         else:
                             st.error("EnlightenGAN processing failed")
                 else:
                     st.warning("EnlightenGAN is not available")
-            # All Results Comparison Tab
             with tabs[4]:
                 create_image_comparison_tab(results, st.session_state.light_mode)
-            # Metrics Comparison Tab
             with tabs[5]:
                 if len(results) > 1:
                     display_metrics_comparison(results, st.session_state.light_mode)
@@ -611,5 +512,6 @@ def main():
                     st.warning("Process at least one enhancement method to see comparisons")
         except Exception as e:
             st.error(f"An error occurred: {str(e)}")
+
 if __name__ == "__main__":
     main()
