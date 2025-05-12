@@ -11,6 +11,6 @@ torch==2.2.1
 torchvision==0.17.1
 tqdm==4.67.1
 wandb==0.19.10
-brisque==0.0.6           # Python wrapper for BRISQUE (no-reference IQA)
+brisque        # Python wrapper for BRISQUE (no-reference IQA)
 scikit-image==0.22.0     # BRISQUE dependency
 scipy==1.13.0            # BRISQUE dependency
