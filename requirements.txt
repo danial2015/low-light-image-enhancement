@@ -10,5 +10,5 @@ pyiqa==0.1.13
 scikit-image==0.23.2
 matplotlib==3.8.4
 scikit-learn==1.4.2
-brisque==0.0.4
+brisque==0.0.16
 onnxruntime==1.17.1
