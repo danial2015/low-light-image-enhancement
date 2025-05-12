@@ -1,6 +1,6 @@
 gdown==5.2.0
-matplotlib==3.9.0  # Versi yang lebih kompatibel
-numpy>=1.23.5      # Diperbarui untuk kompatibilitas
+matplotlib==3.9.0
+numpy>=1.23.5
 onnxruntime==1.20.1
 pandas==2.2.3
 Pillow==11.2.1
@@ -11,3 +11,4 @@ torch==2.5.1
 torchvision==0.20.1
 tqdm==4.67.1
 wandb==0.19.10
+opencv-python-headless==4.11.0.86
