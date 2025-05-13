@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import PIL.Image
 import cv2
+import matplotlib.pyplot as plt
 from streamlit_image_comparison import image_comparison
 from enlighten_inference import EnlightenOnnxModel
 from zero_dce import Trainer
@@ -25,25 +26,17 @@ def process_enlighten_gan(img_array):
 
 def process_zero_dce(img_array):
     trainer = load_zero_dce_model()
-
-    # Safe input conversion
     if img_array.dtype != np.uint8:
         img_array = (np.clip(img_array, 0, 1) * 255).astype(np.uint8)
-
     img_pil = PIL.Image.fromarray(img_array).convert("RGB").resize((512, 512))
     from io import BytesIO
     img_bytes = BytesIO()
     img_pil.save(img_bytes, format='PNG')
     img_bytes.seek(0)
-
     _, enhanced_img = trainer.infer_cpu(img_bytes, image_resize_factor=1)
-
-    # Handle float32 output
     if enhanced_img.dtype != np.uint8:
         enhanced_img = (np.clip(enhanced_img, 0, 1) * 255).astype(np.uint8)
-
     enhanced_img = cv2.resize(enhanced_img, (img_array.shape[1], img_array.shape[0]))
-
     return np.clip(enhanced_img, 0, 255).astype(np.uint8)
 
 def process_clahe(img_array):
@@ -58,15 +51,13 @@ def SSR(img, sigma):
     img = np.maximum(img, 1e-6)
     blur = cv2.GaussianBlur(img, (0, 0), sigma)
     blur = np.maximum(blur, 1e-6)
-    retinex = np.log1p(img) - np.log1p(blur)
-    return retinex
+    return np.log1p(img) - np.log1p(blur)
 
 def MSR(img, sigma_list):
     result = np.zeros_like(img)
     for c in range(img.shape[2]):
         channel = img[:, :, c]
-        msr_channel = sum(SSR(channel, sigma) for sigma in sigma_list) / len(sigma_list)
-        result[:, :, c] = msr_channel
+        result[:, :, c] = sum(SSR(channel, sigma) for sigma in sigma_list) / len(sigma_list)
     return result
 
 def color_restoration(img, alpha=125, beta=46):
@@ -99,8 +90,6 @@ def MSRCP(img, sigma_list, low_clip=0.01, high_clip=0.99):
 
 def process_retinex(img_array, mode='MSRCR'):
     sigma_list = [15, 80, 250]
-    img = img_array.astype(np.float32) / 255.0 + 1e-6  # avoid log(0)
-
     if mode == 'SSR':
         result = np.zeros_like(img_array.astype(np.float32))
         img = img_array.astype(np.float32) + 1.0
@@ -108,16 +97,13 @@ def process_retinex(img_array, mode='MSRCR'):
             result[:, :, i] = SSR(img[:, :, i], sigma=80)
         result = (result - np.min(result)) / (np.max(result) - np.min(result)) * 255
         return np.clip(result, 0, 255).astype(np.uint8)
-
     elif mode == 'MSR':
         img = img_array.astype(np.float32) + 1.0
         result = MSR(img, sigma_list)
         result = (result - np.min(result)) / (np.max(result) - np.min(result)) * 255
         return np.clip(result, 0, 255).astype(np.uint8)
-
     elif mode == 'MSRCR':
         return MSRCR(img_array.astype(np.float32) / 255.0 + 1e-6, sigma_list)
-
     elif mode == 'MSRCP':
         return MSRCP(img_array.astype(np.float32) / 255.0 + 1e-6, sigma_list)
 
@@ -128,64 +114,51 @@ def convert_to_bytes(img):
     img_pil.save(buf, format="PNG")
     return buf.getvalue()
 
-st.set_page_config(page_title="Low Light Enhancement Ultimate", page_icon="📸", layout="wide")
+def plot_bar(data, title, ylabel):
+    fig, ax = plt.subplots()
+    bars = ax.bar(data.index, data.values)
+    ax.set_title(title)
+    ax.set_ylabel(ylabel)
+    ax.set_xticklabels(data.index, rotation=45, ha="right")
+    for bar in bars:
+        height = bar.get_height()
+        ax.annotate(f'{height:.2f}', xy=(bar.get_x() + bar.get_width() / 2, height),
+                    xytext=(0, 3), textcoords="offset points", ha='center', va='bottom')
+    st.pyplot(fig)
 
-# Custom CSS for elegant styling
-st.markdown("""
-    <style>
-    .block-container {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-    }
-    .stButton > button {
-        border-radius: 10px;
-        background-color: #4CAF50;
-        color: white;
-        padding: 10px 24px;
-        font-size: 16px;
-        margin: 10px 0;
-    }
-    .stDownloadButton > button {
-        border-radius: 10px;
-        background-color: #2196F3;
-        color: white;
-        padding: 8px 16px;
-        font-size: 14px;
-    }
-    </style>
-""", unsafe_allow_html=True)
-st.markdown("## 📸 Low-Light Enhancement Ultimate Dashboard")
-st.markdown("Upload citra low-light untuk membandingkan hasil dari semua metode.")
+# ================= STREAMLIT APP =================
+st.set_page_config(page_title="Low Light Enhancement", page_icon="📸", layout="wide")
+st.title("📸 Low-Light Enhancement Dashboard")
+st.divider()
 
 with st.sidebar:
-    st.header("🔧 Upload & Process")
-    uploaded_file = st.file_uploader("Upload image", type=["jpg", "jpeg", "png"])
-    start_button = st.button("🚀 Start Comparison")
+    st.header("Upload Image")
+    uploaded_file = st.file_uploader("Upload low-light image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
     uploaded_image_pil = PIL.Image.open(uploaded_file).convert("RGB")
     img_array_uploaded = np.array(uploaded_image_pil)
-    st.image(uploaded_image_pil, caption="Original Image", use_column_width=True)
 
-    if st.button("Start Comparison"):
-        results = {}
+    st.subheader("🎯 Preview Uploaded Image")
+    st.image(uploaded_image_pil, caption="Original Image", use_container_width=True)
+    st.divider()
+
+    if st.button("🚀 Run Enhancement Comparison"):
         niqe = Niqe_score()
         brisque = Brisque_score()
-
+        results = {}
         results['Original'] = {'image': img_array_uploaded, 'time': 0,
                                'niqe': niqe.count(img_array_uploaded),
                                'brisque': brisque.count(img_array_uploaded)}
-
         models = {
-            'EnlightenGAN': lambda x: process_enlighten_gan(x),
-            'Zero-DCE': lambda x: process_zero_dce(x),
-            'CLAHE': lambda x: process_clahe(x),
+            'EnlightenGAN': process_enlighten_gan,
+            'Zero-DCE': process_zero_dce,
+            'CLAHE': process_clahe,
             'SSR': lambda x: process_retinex(x, 'SSR'),
             'MSR': lambda x: process_retinex(x, 'MSR'),
             'MSRCR': lambda x: process_retinex(x, 'MSRCR'),
             'MSRCP': lambda x: process_retinex(x, 'MSRCP')
         }
-
         for name, func in models.items():
             with st.spinner(f"Running {name}..."):
                 start = time.time()
@@ -195,28 +168,61 @@ if uploaded_file:
                                  'niqe': niqe.count(result),
                                  'brisque': brisque.count(result)}
 
-        st.subheader("🔎 Results")
+        st.subheader("🔎 Enhanced Images")
         cols = st.columns(4)
         methods = list(results.keys())[1:]
         for idx, method in enumerate(methods):
             col = cols[idx % 4]
             img_pil = PIL.Image.fromarray(results[method]['image'])
             with col:
-                st.image(img_pil, caption=f"{method}\n{results[method]['time']:.2f}s", use_column_width=True)
-                st.download_button(label=f"Download {method}", data=convert_to_bytes(results[method]['image']),
+                st.image(img_pil, caption=f"{method}\n{results[method]['time']:.2f}s", use_container_width=True)
+                st.download_button(f"Download {method}", data=convert_to_bytes(results[method]['image']),
                                    file_name=f"{method}.png", mime="image/png")
 
-        st.markdown("---")
-        st.subheader("📊 Quality Metrics")
+        st.divider()
         metrics_df = pd.DataFrame({
             "NIQE": [results[m]['niqe'] for m in results],
             "BRISQUE": [results[m]['brisque'] for m in results],
             "Time (s)": [results[m]['time'] for m in results]
         }, index=results.keys())
-        st.dataframe(metrics_df)
+        metrics_df.loc['Original', 'Time (s)'] = np.nan
 
-        st.markdown("---")
-        st.subheader("🖼️ Image Comparison Slider")
+        st.subheader("📊 Quality Metrics Table")
+
+        def highlight_best_worst(s):
+            s_wo_original = s.drop(labels='Original', errors='ignore')
+            is_best = s == s_wo_original.min()
+            is_worst = s == s_wo_original.max()
+            return ['background-color: lightgreen' if b else 
+                    'background-color: salmon' if w else '' 
+                    for b, w in zip(is_best, is_worst)]
+
+        styled_df = metrics_df.style.apply(highlight_best_worst, subset=['NIQE'])
+        styled_df = styled_df.apply(highlight_best_worst, subset=['BRISQUE'])
+        styled_df = styled_df.apply(highlight_best_worst, subset=['Time (s)'])
+        st.dataframe(styled_df)
+
+        st.subheader("📈 Quality Metrics Bar Charts")
+        metrics_plot = metrics_df.drop(index='Original')
+        plot_bar(metrics_plot["NIQE"], "NIQE Score per Method", "NIQE")
+        plot_bar(metrics_plot["BRISQUE"], "BRISQUE Score per Method", "BRISQUE")
+        plot_bar(metrics_plot["Time (s)"], "Processing Time per Method", "Time (s)")
+
+        st.divider()
+        st.subheader("✅ Automatic Recommendation")
+        weights = {"NIQE": 0.4, "BRISQUE": 0.5, "Time (s)": 0.1}
+        metrics_no_original = metrics_df.drop(index='Original')
+        normalized = (metrics_no_original - metrics_no_original.min()) / (metrics_no_original.max() - metrics_no_original.min())
+        scores = (
+            weights["NIQE"] * normalized["NIQE"] +
+            weights["BRISQUE"] * normalized["BRISQUE"] +
+            weights["Time (s)"] * normalized["Time (s)"]
+        )
+        best_method = scores.idxmin()
+        st.success(f"🎉 **{best_method}** dipilih sebagai metode terbaik berdasarkan kombinasi NIQE, BRISQUE, dan waktu proses.")
+
+        st.divider()
+        st.subheader("🖼️ Image Comparison Sliders")
         for method in methods:
             image_comparison(img1=uploaded_image_pil,
                              img2=PIL.Image.fromarray(results[method]['image']),
