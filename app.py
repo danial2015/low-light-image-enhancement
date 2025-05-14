@@ -208,19 +208,7 @@ if uploaded_file:
         plot_bar(metrics_plot["BRISQUE"], "BRISQUE Score per Method", "BRISQUE")
         plot_bar(metrics_plot["Time (s)"], "Processing Time per Method", "Time (s)")
 
-        st.divider()
-        st.subheader("✅ Automatic Recommendation")
-        weights = {"NIQE": 0.4, "BRISQUE": 0.5, "Time (s)": 0.1}
-        metrics_no_original = metrics_df.drop(index='Original')
-        normalized = (metrics_no_original - metrics_no_original.min()) / (metrics_no_original.max() - metrics_no_original.min())
-        scores = (
-            weights["NIQE"] * normalized["NIQE"] +
-            weights["BRISQUE"] * normalized["BRISQUE"] +
-            weights["Time (s)"] * normalized["Time (s)"]
-        )
-        best_method = scores.idxmin()
-        st.success(f"🎉 **{best_method}** dipilih sebagai metode terbaik berdasarkan kombinasi NIQE, BRISQUE, dan waktu proses.")
-
+        
         st.divider()
         st.subheader("🖼️ Image Comparison Sliders")
         for method in methods:
