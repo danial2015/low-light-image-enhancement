@@ -42,7 +42,7 @@ def process_zero_dce(img_array):
 def process_clahe(img_array):
     img_lab = cv2.cvtColor(img_array, cv2.COLOR_RGB2LAB)
     l, a, b = cv2.split(img_lab)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    clahe = cv2.createCLAHE(clipLimit=6.0, tileGridSize=(8,8))
     cl = clahe.apply(l)
     img_clahe = cv2.merge((cl, a, b))
     return cv2.cvtColor(img_clahe, cv2.COLOR_LAB2RGB)
